@@ -101,12 +101,11 @@ class InMemoryProvider extends Provider with LazyLogging {
     }
   }
 
-  override def putObjectMultipartStart(bucket: String, key: String, metadata: ObjectMetadata): InitiateMultipartUploadResult = {
+  override def putObjectMultipartStart(bucket: String, key: String): InitiateMultipartUploadResult = {
     bucketDataStore.get(bucket) match {
       case Some(_) =>
         val id = Math.abs(Random.nextLong()).toString
         multipartTempStore.putIfAbsent(id, new mutable.TreeSet)
-        metadataStore.put(bucket, key, metadata)
         logger.debug(s"starting multipart upload for s3://$bucket/$key")
         InitiateMultipartUploadResult(bucket, key, id)
       case None => throw NoSuchBucketException(bucket)
@@ -129,12 +128,7 @@ class InMemoryProvider extends Provider with LazyLogging {
         bucketContent.keysInBucket.put(key, KeyContents(DateTime.now, completeBytes))
         multipartTempStore.remove(uploadId)
         logger.debug(s"completed multipart upload for s3://$bucket/$key")
-        val hash = DigestUtils.md5Hex(completeBytes)
-        metadataStore.get(bucket, key).foreach {m =>
-          m.setContentMD5(hash)
-          m.setLastModified(org.joda.time.DateTime.now().toDate)
-        }
-        CompleteMultipartUploadResult(bucket, key, hash)
+        CompleteMultipartUploadResult(bucket, key, DigestUtils.md5Hex(completeBytes))
       case None => throw NoSuchBucketException(bucket)
     }
   }
